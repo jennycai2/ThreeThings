@@ -300,7 +300,7 @@ class Signup(BaseHandler):
     def post(self):
         self.password=self.request.get('password')
         self.email=self.request.get('email')
-        self.skype=xyz
+        self.skype='xyz'
         #self.skype=self.request.get('skype')
         
         logging.info("skype is %s", self.skype)
@@ -427,7 +427,7 @@ class Debug(BaseHandler):
     def get(self):
 
         #debug = True
-        #debug = False
+        debug = False
         if debug:
             #DEBUG Records
             ris = db.GqlQuery("SELECT * FROM RecordItems ORDER BY itemsRecorded DESC LIMIT 14")
