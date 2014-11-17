@@ -300,10 +300,10 @@ class Signup(BaseHandler):
     def post(self):
         self.password=self.request.get('password')
         self.email=self.request.get('email')
+        # convert email to lowercase
+        self.email = self.email.lower()
         self.skype='xyz'
         #self.skype=self.request.get('skype')
-        
-        logging.info("skype is %s", self.skype)
 
         have_error=False
 
@@ -335,7 +335,7 @@ class Register(Signup):
         u = User.by_name(self.email)
         if u:
             msg = 'That email already registered.'
-            self.render('signup.html', error_email = msg)
+            self.render('signup-form.html', error_email = msg)
         else:
             u = User.register(self.email, self.password, self.skype)
             u.put()
@@ -350,6 +350,7 @@ class Login(BaseHandler):
         
     def post(self):
         email=self.request.get('email')
+        email = email.lower()
         password=self.request.get('password')
             
         logging.info("email is %s" % email)
@@ -357,7 +358,8 @@ class Login(BaseHandler):
         u = User.login(email, password)
         if (u):
             self.login(u)
-            self.redirect('/record')
+            self.redirect('/record')  
+            #self.render('record.html', username=email)
         else:
             msg = 'Invalid sign in'
             self.render("signin-form.html", error = msg)   
@@ -471,7 +473,16 @@ class Recent(BaseHandler):
             else:
                 self.response.write("     %s" % ri.item2)
             ri.itemsRecorded = ri.itemsRecorded.replace(microsecond=0)      
-            self.response.write(" (%s)" % ri.itemsRecorded)
+            self.response.write(" (%s)<br>" % ri.itemsRecorded)
+
+def recent_record(username):
+        ri = None
+        query = RecordItems.all()
+        query.filter('personId', username)
+        query.order('-itemsRecorded')   
+        for ri in query:
+            break  
+        return ri   
 
 class Record(BaseHandler):
     def get(self):
@@ -483,20 +494,21 @@ class Record(BaseHandler):
 
     def post(self):
         username=self.user.email
-        
-        #save info to database
         # display something like "your plan for tomorrow has been saved" and/or "your achievement for today has been saved"
         tomorrow=self.request.get('tomorrow')
-        #first check if there is any '.' or ','' if so, use it as a separator, otherwise, use space
-        sep = ' '
-        if ('.' in tomorrow):
-            sep = '.'
-        elif (',' in tomorrow):
-            sep = ','    
-        things = tomorrow.split(sep);
+        # we need recent record for two reasons (the user may mark off them; need it to render the page)
+        rr = recent_record(username) 
 
         if len(tomorrow) != 0:
-            #there is at least 1 entry to be saved into DB
+            #there is at least 1 entry
+            #first check if there is any '.' or ','' if so, use it as a separator, otherwise, use space
+            sep = ' '
+            if ('.' in tomorrow):
+                sep = '.'
+            elif (',' in tomorrow):
+                sep = ','    
+            things = tomorrow.split(sep);
+
             #if one or two entries, add "" as missing items. 
             #if there are more than 3 entries, take 1, 2, and combine 3 and others as item 3
             if len(things) == 1:
@@ -509,37 +521,57 @@ class Record(BaseHandler):
                 idx=tomorrow.find(things[2])
                 things[2]=tomorrow[idx:] 
             ri = RecordItems(personId = username, item0=things[0], item1=things[1], item2=things[2])
-            ri.put()      
+            ri.put() 
+            #if the user enters three items, we'll use them when rendering the page
+            item0 = things[0] 
+            item1 = things[1] 
+            item2 = things[2]    
+        else:
+            if (rr):
+                item0 = rr.item0 
+                item1 = rr.item1
+                item2 = rr.item2               
+         
+        if (rr):   
+            if self.request.get('item0', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
+                rr.item0Done = True
+            if self.request.get('item1', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
+                rr.item1Done = True
+            if self.request.get('item2', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
+                rr.item2Done = True
+            if self.request.get('items', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:  
+                rr.item0Done = True     
+                rr.item1Done = True  
+                rr.item2Done = True         
+            rr.put()
 
-        # display recent entries
+        self.render('record.html', username=self.user.email, item0=item0, item1=item1, item2=item2)
+
+#TTTTTTTTTTTTTTTTTTTTTTTT
         query = RecordItems.all()
         query.filter('personId', username)
         query.order('-itemsRecorded')   
-        for ri in query:
-            #self.response.write("\n<br><br> %s" % ri.personId)
-            #self.response.write("<br><br> %s" % ri.planItems) 
-            #ri.itemsRecorded = ri.itemsRecorded.replace(microsecond=0)
-            #self.response.write("<br> planned at %s" % ri.itemsRecorded) 
-            break  
+        self.response.write("Recent entries (items in <b>bold</b> have been completed)<br>")
+        self.response.write("ITEM 1    ITEM 2    ITEM 3    (DAY)<br><br>")
+        for ri in query:      
+            if (ri.item0Done):
+                self.response.write("     <b>%s</b>" % ri.item0)
+            else:
+                self.response.write("     %s" % ri.item0)
 
-        #things = ri.planItems.split(",")
-        #self.response.write("<br><br> %s" % things[0])         
-        self.render('record.html', username=self.user.email, item0=ri.item0, item1=ri.item1, item2=ri.item2)
+            if (ri.item1Done):
+                self.response.write("     <b>%s</b>" % ri.item1)
+            else:
+                self.response.write("     %s" % ri.item1)
+ 
+            if (ri.item2Done):
+                self.response.write("     <b>%s</b>" % ri.item2)
+            else:
+                self.response.write("     %s" % ri.item2)
+            ri.itemsRecorded = ri.itemsRecorded.replace(microsecond=0)      
+            self.response.write(" (%s)<br>" % ri.itemsRecorded)
 
-        # UPDATE DB
 
-        if self.request.get('item0', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-            ri.item0Done = True
-        if self.request.get('item1', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-            ri.item1Done = True
-        if self.request.get('item2', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-            ri.item2Done = True
-        if self.request.get('ALL', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-            ri.item0Done = True     
-            ri.item1Done = True  
-            ri.item2Done = True         
-
-        ri.put()
 
 
 application = webapp2.WSGIApplication([
