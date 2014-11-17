@@ -502,6 +502,7 @@ class Record(BaseHandler):
         if len(tomorrow) != 0:
             #there is at least 1 entry
             #first check if there is any '.' or ','' if so, use it as a separator, otherwise, use space
+            #what if a user enters 'one two. three' It's ok, the first 2 entries will be combined
             sep = ' '
             if ('.' in tomorrow):
                 sep = '.'
