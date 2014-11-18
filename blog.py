@@ -102,7 +102,7 @@ class BlogFront(Handler):
     def get(self):
         self.render('mainpage.html')
     def post(self):
-        self.redirect('/signup')
+        self.redirect('/signin')
 
 class PostPage(Handler):
     def get(self, post_id):
@@ -459,14 +459,14 @@ class Recent(BaseHandler):
         self.response.write("ITEM 1    ITEM 2    ITEM 3    (DAY)<br><br>")
         for ri in query:      
             if (ri.item0Done):
-                self.response.write("     <b>%s</b>" % ri.item0)
+                self.response.write("     <b>%s</b>. " % ri.item0)
             else:
-                self.response.write("     %s" % ri.item0)
+                self.response.write("     %s. " % ri.item0)
 
             if (ri.item1Done):
-                self.response.write("     <b>%s</b>" % ri.item1)
+                self.response.write("     <b>%s</b>. " % ri.item1)
             else:
-                self.response.write("     %s" % ri.item1)
+                self.response.write("     %s. " % ri.item1)
  
             if (ri.item2Done):
                 self.response.write("     <b>%s</b>" % ri.item2)
@@ -490,9 +490,12 @@ class Record(BaseHandler):
             
             self.render('record.html', username=self.user.email)
         else:
-            self.redirect('/signup')
+            self.redirect('/signin')
 
     def post(self):
+      if not self.user:
+        self.redirect('/signin')
+      else:
         username=self.user.email
         # display something like "your plan for tomorrow has been saved" and/or "your achievement for today has been saved"
         tomorrow=self.request.get('tomorrow')
@@ -556,14 +559,14 @@ class Record(BaseHandler):
         self.response.write("ITEM 1    ITEM 2    ITEM 3    (DAY)<br><br>")
         for ri in query:      
             if (ri.item0Done):
-                self.response.write("     <b>%s</b>" % ri.item0)
+                self.response.write("     <b>%s</b>. " % ri.item0)
             else:
-                self.response.write("     %s" % ri.item0)
+                self.response.write("     %s. " % ri.item0)
 
             if (ri.item1Done):
-                self.response.write("     <b>%s</b>" % ri.item1)
+                self.response.write("     <b>%s</b>. " % ri.item1)
             else:
-                self.response.write("     %s" % ri.item1)
+                self.response.write("     %s. " % ri.item1)
  
             if (ri.item2Done):
                 self.response.write("     <b>%s</b>" % ri.item2)
