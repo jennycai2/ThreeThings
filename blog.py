@@ -433,7 +433,9 @@ def recent_record(username):
 class Notes(BaseHandler):
     def get(self):
         if self.user:
-            self.render('notes.html', username=self.user.email)
+            subject = 'Draft'
+            p = db.GqlQuery("SELECT * FROM Post WHERE subject = "Draft" ORDER BY ItemsRecorded DESC LIMIT 1")
+            self.render('notes.html', username=self.user.email, subject = subject, content = p.content)
         else:
             self.redirect('/signin')
 
@@ -446,7 +448,13 @@ class Notes(BaseHandler):
         content = self.request.get('content')
 
         if content:
-            p = Post(parent = blog_key(), person_id = username, subject = subject, content = content)
+            if (not subject):
+                subject = 'Untitled'
+            # if it is 'Draft', we update the database entry instead of creating a new entry
+            if (subject == 'Draft'):
+                p = db.GqlQuery("SELECT * FROM Post WHERE subject = "Draft" ORDER BY ItemsRecorded DESC LIMIT 1")
+            else:
+                p = Post(parent = blog_key(), person_id = username, subject = subject, content = content)
             p.put()
 
             self.render('notes.html', username = username)
