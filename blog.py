@@ -44,18 +44,6 @@ def render_post(response, post):
 def blog_key(name = 'default'):
     return db.Key.from_path('blogs', name)
 
-
-
-class Post(db.Model):
-    subject = db.StringProperty(required = True)
-    content = db.TextProperty(required = True)
-    created = db.DateTimeProperty(auto_now_add = True)
-    last_modified = db.DateTimeProperty(auto_now = True)
-
-    def render(self):
-        self._render_text = self.content.replace('\n', '<br>')
-        return render_str("post.html", p = self)
-
 def age_set(key, val):
     save_time = datetime.utcnow()
     memcache.set(key, (val, save_time))
@@ -120,27 +108,6 @@ class PostPage(Handler):
 
         self.render("permalink.html", post = post, age = age_str(age))
 
-
-class NewPost(Handler):
-    def get(self):
-    	logging.info("THIS IS A GET")
-    	self.render('newpost.html')
-      
-    def post(self):
-    	logging.info("THIS IS A POST")
-        subject=self.request.get('subject')
-        content = self.request.get('content')
-
-        if subject and content:
-            p = Post(parent = blog_key(), subject = subject, content = content)
-            p.put()
-            self.redirect('/%s' % str(p.key().id()))
-            logging.info("WRITE TO DATABASE for %s", subject)
-        else:
-            error = "subject and content, please!"
-            self.render("newpost.html", subject=subject, content=content, error=error)
-
-
 SECRET = "TheHearth"
 def hash_str(s):
         return hmac.new(SECRET, s).hexdigest()
@@ -170,11 +137,16 @@ def valid_pw(name, pw, h):
 def users_key(group = 'default'):
     return db.Key.from_path('users', group)
 
-class ActiveButtons(db.Model):
+class Post(db.Model):
     person_id = db.StringProperty(required = True)
-    skype = db.StringProperty()
-    hashtag = db.StringProperty()
-    pressed = db.DateTimeProperty(auto_now_add = True)
+    subject = db.StringProperty()
+    content = db.TextProperty(required = True)
+    created = db.DateTimeProperty(auto_now_add = True)
+    last_modified = db.DateTimeProperty(auto_now = True)
+
+    def render(self):
+        self._render_text = self.content.replace('\n', '<br>')
+        return render_str("post.html", p = self)
 
 class RecordItems(db.Model):
     personId = db.StringProperty(required = True)
@@ -186,14 +158,6 @@ class RecordItems(db.Model):
     item1Done = db.BooleanProperty()
     item2Done = db.BooleanProperty()
     itemsRecorded = db.DateTimeProperty(auto_now_add = True)
-    isDone = db.IntegerProperty()
-
-class ButtonPress(db.Model):
-    person_id = db.StringProperty(required = True)
-    skype = db.StringProperty()
-    hashtag = db.StringProperty()
-    pressed = db.DateTimeProperty(auto_now_add = True)
-    pair_with = db.StringProperty()
       
 class User(db.Model):
     #name = db.StringProperty(required = True)
@@ -405,31 +369,12 @@ def debug_items():
         #memcache.set(key, buttons)
         #logging.info("after caling list, button is %s" % buttons)
     return buttons
-
-
-def recent_buttons(update = False):
-    key = 'recent'
-    b = memcache.get(key)
-    if b is None or update:
-        #read from DB
-        #if the other user doesn't respond, the current user can press the button again
-        #read the most entry in the database
-        logging.error("READ FROM DB")
-        #buttons = db.GqlQuery("SELECT * FROM ButtonPress ORDER BY pressed DESC LIMIT 1")
-        b = db.GqlQuery("SELECT * FROM ButtonPress ORDER BY pressed DESC LIMIT 1")
-        #get_by_id(id, parent=None, app=None, namespace=None, **ctx_options)
-
-        
-        #buttons = list(buttons)
-        #memcache.set(key, buttons)
-        #logging.info("after caling list, button is %s" % buttons)
-    return b
                             
 class Debug(BaseHandler):
     def get(self):
 
-        #debug = True
-        debug = False
+        debug = True
+        #debug = False
         if debug:
             #DEBUG Records
             ris = db.GqlQuery("SELECT * FROM RecordItems ORDER BY itemsRecorded DESC LIMIT 14")
@@ -447,10 +392,10 @@ class Debug(BaseHandler):
 
 class Recent(BaseHandler):
     def get(self):
-        # display recent entries
-        username = ''
-        if self.user: 
-            username=self.user.email
+      # display recent entries
+      username = ''
+      if self.user: 
+        username=self.user.email
 
         query = RecordItems.all()
         query.filter('personId', username)
@@ -484,11 +429,11 @@ def recent_record(username):
             break  
         return ri   
 
-class Record(BaseHandler):
+
+class Notes(BaseHandler):
     def get(self):
         if self.user:
-            
-            self.render('record.html', username=self.user.email)
+            self.render('notes.html', username=self.user.email)
         else:
             self.redirect('/signin')
 
@@ -497,11 +442,62 @@ class Record(BaseHandler):
         self.redirect('/signin')
       else:
         username=self.user.email
+        subject=self.request.get('subject')
+        content = self.request.get('content')
+
+        if content:
+            p = Post(parent = blog_key(), person_id = username, subject = subject, content = content)
+            p.put()
+
+            self.render('notes.html', username = username)
+            # display all entries belong to this user
+            posts = Post.all().order('-created')
+            for post in posts:
+                self.response.write("     <b>%s</b> " % post.subject)
+                self.response.write("     %s <br>" % post.content)
+        else:
+            error = "content, please!"
+            self.render("notes.html", username = username, subject=subject, content=content, error=error)
+
+class Record(BaseHandler):
+    def get(self):
+        if self.user:
+            self.render('record.html', username=self.user.email)
+        else:
+            self.redirect('/signin')
+
+    def post(self):
+      if not self.user:
+        self.redirect('/signin')
+      else:
+        item0 = None
+        item1 = None
+        item2 = None
+
+        # STEP 1, did the user mark off any itme as done
+        username=self.user.email
         # display something like "your plan for tomorrow has been saved" and/or "your achievement for today has been saved"
-        tomorrow=self.request.get('tomorrow')
         # we need recent record for two reasons (the user may mark off them; need it to render the page)
         rr = recent_record(username) 
+        if (rr):   
+            if self.request.get('item0', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
+                rr.item0Done = True
+            if self.request.get('item1', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
+                rr.item1Done = True
+            if self.request.get('item2', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
+                rr.item2Done = True
+            if self.request.get('items', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:  
+                rr.item0Done = True     
+                rr.item1Done = True  
+                rr.item2Done = True         
+            rr.put()
+            # may use recent record from DB to render the page
+            item0 = rr.item0 
+            item1 = rr.item1
+            item2 = rr.item2  
 
+        # STEP 2, what plan has the user entered
+        tomorrow=self.request.get('tomorrow')
         if len(tomorrow) != 0:
             #there is at least 1 entry
             #first check if there is any '.' or ','' if so, use it as a separator, otherwise, use space
@@ -524,34 +520,22 @@ class Record(BaseHandler):
             if len(things) > 3:
                 idx=tomorrow.find(things[2])
                 things[2]=tomorrow[idx:] 
-            ri = RecordItems(personId = username, item0=things[0], item1=things[1], item2=things[2])
-            ri.put() 
+            # save current record into database
+            cr = RecordItems(personId = username, item0=things[0], item1=things[1], item2=things[2])
+            cr.put() 
             #if the user enters three items, we'll use them when rendering the page
             item0 = things[0] 
             item1 = things[1] 
-            item2 = things[2]    
-        else:
-            if (rr):
-                item0 = rr.item0 
-                item1 = rr.item1
-                item2 = rr.item2               
-         
-        if (rr):   
-            if self.request.get('item0', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-                rr.item0Done = True
-            if self.request.get('item1', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-                rr.item1Done = True
-            if self.request.get('item2', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:
-                rr.item2Done = True
-            if self.request.get('items', '').lower() in ['true', 'yes', 't', '1', 'on', 'checked']:  
-                rr.item0Done = True     
-                rr.item1Done = True  
-                rr.item2Done = True         
-            rr.put()
+            item2 = things[2]   
 
+        # STEP 3, render a page - the three things planned
         self.render('record.html', username=self.user.email, item0=item0, item1=item1, item2=item2)
 
+        # STEP 4, render recent entries
 #TTTTTTTTTTTTTTTTTTTTTTTT
+        # if a user didn't enter any plan, and there is no record from DB, we'll just return
+        if (not item0):
+            return
         query = RecordItems.all()
         query.filter('personId', username)
         query.order('-itemsRecorded')   
@@ -576,15 +560,13 @@ class Record(BaseHandler):
             self.response.write(" (%s)<br>" % ri.itemsRecorded)
 
 
-
-
 application = webapp2.WSGIApplication([
 	('/?', Record),
 
     ('/flush', Flush),
     ('/([0-9]+)', PostPage),
     ('/([0-9]+).json', PostJson),
-    ('/newpost', NewPost),
+    ('/notes', Notes),
     ('/.json', BlogJson),
 
     ('/recent', Recent),
