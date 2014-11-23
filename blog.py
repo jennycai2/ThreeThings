@@ -138,7 +138,7 @@ def users_key(group = 'default'):
     return db.Key.from_path('users', group)
 
 class Post(db.Model):
-    person_id = db.StringProperty(required = True)
+    person_id = db.StringProperty()
     subject = db.StringProperty()
     content = db.TextProperty(required = True)
     created = db.DateTimeProperty(auto_now_add = True)
@@ -429,13 +429,27 @@ def recent_record(username):
             break  
         return ri   
 
+def recent_note(username):
+        rn = None
+        query = Post.all()
+        query.filter('person_id', username)
+        query.order('-last_modified')   
+        for rn in query:
+            break
+
+        return rn   
 
 class Notes(BaseHandler):
     def get(self):
         if self.user:
-            subject = 'Draft'
-            p = db.GqlQuery("SELECT * FROM Post WHERE subject = "Draft" ORDER BY ItemsRecorded DESC LIMIT 1")
-            self.render('notes.html', username=self.user.email, subject = subject, content = p.content)
+            username=self.user.email
+            subject = ''
+            content = ''
+            rn = recent_note(username)
+            if (rn):
+                subject = rn.subject
+                content = rn.content
+            self.render('notes.html', username=username, subject = subject, content = content)
         else:
             self.redirect('/signin')
 
@@ -445,27 +459,31 @@ class Notes(BaseHandler):
       else:
         username=self.user.email
         subject=self.request.get('subject')
+        if (not subject):
+            subject = 'Untitled'
         content = self.request.get('content')
-
+        self.render('notes.html', username = username, subject = subject, content = content)
         if content:
-            if (not subject):
-                subject = 'Untitled'
-            # if it is 'Draft', we update the database entry instead of creating a new entry
-            if (subject == 'Draft'):
-                p = db.GqlQuery("SELECT * FROM Post WHERE subject = "Draft" ORDER BY ItemsRecorded DESC LIMIT 1")
-            else:
+            rn = recent_note(username)
+            if (rn and (rn.subject == subject)):
+                # just update the note
+                rn.content = content
+                rn.put()
+            else:     
                 p = Post(parent = blog_key(), person_id = username, subject = subject, content = content)
-            p.put()
-
-            self.render('notes.html', username = username)
+                p.put()
+            
             # display all entries belong to this user
-            posts = Post.all().order('-created')
-            for post in posts:
+            self.response.write("    <b>%s</b> " % subject)
+            self.response.write("    %s <br> " % content)
+            debug = False
+            if (debug):
+              posts = Post.all().order('-created')
+              for post in posts:
                 self.response.write("     <b>%s</b> " % post.subject)
                 self.response.write("     %s <br>" % post.content)
-        else:
-            error = "content, please!"
-            self.render("notes.html", username = username, subject=subject, content=content, error=error)
+                self.response.write("     %s <br>" % post.created)
+                #post.delete()
 
 class Record(BaseHandler):
     def get(self):
